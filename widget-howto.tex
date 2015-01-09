@@ -1,0 +1,204 @@
+\documentclass{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{setspace}
+\usepackage{color}
+\usepackage{listings}
+
+\usepackage{hyperref}
+\usepackage{graphicx}
+
+\usepackage[scaled]{beramono}
+\newcommand\Small{\fontsize{9}{9.2}\selectfont}
+\newcommand\LSTfont{\Small\ttfamily}
+
+\usetheme{Dresden}
+
+\title{How to build a Widget}
+\author{Constantin Hofstetter}
+\subtitle{For an up-to-date version and discussions see \href{https://github.com/consti/widget-howto}{https://github.com/consti/widget-howto}}
+\date{\today}
+
+\begin{document}
+
+\lstset{ %
+language=Html,                % choose the language of the code
+basicstyle=\LSTfont,       % the size of the fonts that are used for the code
+stepnumber=1,                   % the step between two line-numbers. If it is 1 each line will be numbered
+numbersep=5pt,                  % how far the line-numbers are from the code
+backgroundcolor=\color{white},  % choose the background color. You must add \usepackage{color}
+showspaces=false,               % show spaces adding particular underscores
+showstringspaces=false,         % underline spaces within strings
+showtabs=false,                 % show tabs within strings adding particular underscores
+frame=false,           % adds a frame around the code
+tabsize=2,          % sets default tabsize to 2 spaces
+captionpos=b,           % sets the caption-position to bottom
+breaklines=true,        % sets automatic line breaking
+breakatwhitespace=false,    % sets if automatic breaks should only happen at whitespace
+escapeinside={\%*}{*)},          % if you want to add a comment within your code
+keywordstyle=\color{blue},
+stringstyle=\color{red},
+commentstyle=\color{green},
+morecomment=[l][\color{magenta}]{\#}
+}
+
+\begin{frame}
+\titlepage
+\end{frame}
+
+\begin{frame}
+\frametitle{Widgets}
+Design a widget infrastructure so that a client can implement a part of your website as a third-party component.
+\end{frame}
+
+\begin{frame}[fragile]{Goals}
+  \begin{itemize}
+    \item Easy to integrate for the client
+    \item Flexible for us to change in the future
+    \item Customizable
+    \item Responsive
+    \item Cross-Browser compliant
+    \item Good for SEO
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Integration: IFRAME vs. JSONP}
+
+\begin{block}{IFRAME}
+Render the widget as an IFRAME element.
+\begin{itemize}
+  \item Advantages: \lstinline{IFRAME} content is sandboxed: CSS and Javascript that will not interfere with the clients page.
+  \item Drawbacks: Impossible to get the \lstinline{IFRAME}s height or the \lstinline{document.location} from the client site (cross-domain security).
+\end{itemize}
+\end{block}
+
+\begin{block}{JSONP}
+  Render the widget as complete Javascript/AJAX request.
+  \begin{itemize}
+    \item Advantages: We can freely interact with the client site, since everything is rendered inline and in the current DOM. Usually also faster to render than an IFRAME.
+    \item Drawbacks: Our CSS and Javascript interferes with the client site. Usually a lot more difficult to maintain.
+  \end{itemize}
+\end{block}
+
+\end{frame}
+
+
+\begin{frame}[fragile]{Integration: Best practice}
+
+\begin{block}{<script/> that renders an IFRAME}
+  \begin{lstlisting}
+# On the client site
+<div id="widget-placeholder" />
+<script src="http://example.com/widget.js" />
+
+# in widget.js
+var ph = document.getElementById('widget-placeholder');
+var widget = document.createElement('IFRAME');
+widget.src = "http://example.com/widget?location=" + document.location;
+ph.parentNode.replaceChild(widget, ph);
+  \end{lstlisting}
+  \textbf{Easy to integrate for the client} and \textbf{flexible for us to change in the future}: we have full access to the DOM and our IFRAME (we can pass arguments to the URL or use \lstinline{postMessage} in Javascript).
+\end{block}
+
+\end{frame}
+
+\begin{frame}[fragile]{Customization}
+
+\begin{block}{Add \lstinline{data} attributes to the placeholder}
+
+  \begin{lstlisting}
+# On the client site
+<div id="widget-placeholder" data-widget-locale="de" />
+<script src="http://example.com/widget.js" />
+
+# in widget.js
+var widget = document.createElement('IFRAME');
+var ph = document.getElementById('widget-placeholder');
+var locale = ph.getAttribute('data-widget-locale');
+widget.src = "http://example.com/widget?locale=" + locale;
+ph.parentNode.replaceChild(widget, ph);
+  \end{lstlisting}
+
+  \textbf{Why not add it to the \lstinline{script} URL?} Google and others will crawl the URL and we also want \lstinline{widget.js} to be cachable and static.
+\end{block}
+\end{frame}
+
+\begin{frame}[fragile]{Responsiveness}
+
+Widget should have a default, but customizable height and resize the width based on the parent element (the context it is based in).
+\begin{lstlisting}
+# in widget.js
+widget.height = "600";
+if (ph.getAttribute('data-widget-height')) {
+  widget.height = ph.getAttribute('data-widget-height');
+}
+widget.style = "border: none; max-width: 100%; min-width: 180px; width: 520px;";
+widget.src = "http://example.com/widget?height="+ widget.height;
+\end{lstlisting}
+This way we have a widget, that is responsive in width (min 180px, max 520px) and height (default 600, but resizable). We pass the height to our widget view since we want to know it at render.
+\end{frame}
+
+\begin{frame}[fragile]{Cross-Browser compliance}
+Using an \lstinline{IFRAME} makes it a lot easier to be browser compliant - just make sure the rendered widget works in every browser. For the \lstinline{widget.js}, make sure to keep it small and don't depend on third-party libraries (no jQuery etc.).
+
+
+Allow multiple widgets on one page (and still not use \lstinline{getElementsByClassName} which does not work with some browsers):
+\begin{lstlisting}
+# on client site
+<div class='widget-placeholder'/>
+<script src="http://example.com/widget.js" />
+# in widget.js
+all_phs = document.getElementsByTagName('widget-placeholder');
+last_ph = all_phs[all_phs.length - 1];
+\end{lstlisting}
+\end{frame}
+
+
+\begin{frame}[fragile]{SEO: Backlink Win}
+Widgets that get integrated on many pages can really boost SEO:
+\begin{lstlisting}
+<a class='widget-placeholder'
+   data-widget-city='bangkok'
+   href='http://example.com/cities/bangkok'>
+     Expert Examples in Bangkok
+</a>
+<script src="http://example.com/widget.js" />
+\end{lstlisting}
+Use a backlink as placeholder that gets replaced by an \lstinline{IFRAME} at render. This is not prohibited nor discouraged.
+
+Try to link to the corresponding full-website view of the widget content.
+\end{frame}
+
+\begin{frame}[fragile]{SEO: Gotchas}
+\begin{itemize}
+  \item Don't communicate URLs to the embedded widget view (the \lstinline{IFRAME} src website). Build them in Javascript.
+  \item Don't add arguments to the \lstinline{widget.js} URL. Add them as \lstinline{data} attribute to the placeholder.
+  \item Add \lstinline{<meta name="robots" content="noindex, follow" />} to the embedded widget view (the \lstinline{IFRAME} src website). So that if the widget pages get crawled, they don't show up in the search index.
+  \item If possible, serve the widget data (the Javascript and the embedded view) on a seperate subdomain, so that if things go wrong, you don't screw up your main domain.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Development in Rails}
+Make sure you test your widget from different domains before shipping.
+\begin{lstlisting}[language=Ruby]
+class WidgetController < ApplicationController
+  protect_from_forgery except: :script
+  after_action :allow_iframe, only: :embed
+  layout false
+
+  def script
+  end
+
+  def embed
+  end
+
+  private
+  def allow_iframe
+    response.headers.except! 'X-Frame-Options'
+  end
+end
+\end{lstlisting}
+\end{frame}
+
+\end{document}
